@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { canUseDOM } from "../utils";
+import { canUseDOM } from "../lib/helpers";
 
 export default function TwitterButton() {
   const [mounted, setMounted] = useState(false);

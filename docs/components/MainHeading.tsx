@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 const MainHeading = () => {
@@ -16,8 +17,9 @@ const MainHeading = () => {
             manage multiple Flutter SDK versions.
           </p>
           <p className="subtitle">
+            <br className="sm:block hidden" />
             <Link href="/docs">
-              Get started <span>→</span>
+              <Button>Get Started</Button>
             </Link>
           </p>
         </div>
