@@ -14,6 +14,7 @@ const config: DocsThemeConfig = {
       titleTemplate: "%s – FVM - Flutter Version Management",
     };
   },
+  i18n: [{ locale: "en", text: "English" }],
 };
 
 export default config;

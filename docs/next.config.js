@@ -10,4 +10,4 @@ const nextraConfig = withNextra({
   },
 });
 
-module.exports = withNextra();
+module.exports = nextraConfig;
