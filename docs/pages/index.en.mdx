@@ -1,3 +1,29 @@
+import Spacer from "../components/Spacer";
+import GithubStartButton from "../components/GithubStartButton";
+import TwitterButton from "../components/TwitterButton";
+import Link from "next/link";
+import MainHeading from "../components/MainHeading";
+
+<MainHeading />
+
+---
+
+<div class="buttons-row">
+  <GithubStartButton />
+  <Spacer />
+  <Link href="https://pub.dev/packages/fvm">
+    <img alt="Pub Likes" src="https://img.shields.io/pub/likes/fvm?style=for-the-badge&logo=flutter&logoColor=%2358CDFA&label=Pub%20Likes&labelColor=white&color=%2358CDFA"/>
+
+  </Link>
+  <Spacer />
+  <Link href="https://github.com/leoafarias/fvm/graphs/contributors">
+    <img src="https://img.shields.io/github/all-contributors/leoafarias/fvm?style=for-the-badge" />
+  </Link>
+  <Spacer />
+  <TwitterButton />
+</div>
+---
+
 FVM streamlines Flutter version management. It allows per project SDK versions, ensuring consistent app builds and easier testing of new releases, thereby boosting the efficiency of your Flutter project tasks.
 
 ## Why FVM?
