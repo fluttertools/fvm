@@ -1,12 +1,12 @@
 import 'dart:io';
 
+import 'package:fvm/src/utils/context.dart';
+import 'package:fvm/src/version.g.dart';
 import 'package:path/path.dart';
 
 import '../../exceptions.dart';
 import '../../fvm.dart';
 import '../utils/logger.dart';
-import '../version.dart';
-import 'context.dart';
 
 /// Service for FVM settings
 class SettingsService {
@@ -15,7 +15,7 @@ class SettingsService {
 
   /// File for FVM Settings
   static File get settingsFile {
-    return File(join(ctx.fvmHome.path, '.settings'));
+    return File(join(ctx.fvmDir, '.settings'));
   }
 
   /// Returns [SettingsDto]
@@ -32,7 +32,7 @@ class SettingsService {
       }
       return Future.value(_settings);
     } on Exception catch (err) {
-      logger.trace(err.toString());
+      logger.detail(err.toString());
       return _settings = SettingsDto.empty();
     }
   }
@@ -51,7 +51,7 @@ class SettingsService {
       }
       return _settings!;
     } on Exception catch (err) {
-      logger.trace(err.toString());
+      logger.detail(err.toString());
       return _settings = SettingsDto.empty();
     }
   }
@@ -68,7 +68,7 @@ class SettingsService {
       // Store in memory
       _settings = settings;
     } on Exception {
-      throw FvmInternalError('Could not save FVM settings');
+      throw AppException('Could not save FVM settings');
     }
   }
 }

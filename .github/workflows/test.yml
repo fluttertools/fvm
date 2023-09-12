@@ -1,28 +1,16 @@
 name: Test CLI
 
-on: [pull_request]
+on:
+  pull_request:
+    paths-ignore:
+      - "website/**"
+      - "README.md"
+      - "CHANGELOG.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
-    name: "${{ matrix.os }}"
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-        sdk-version: [stable] #, dev]
-        include:
-          - os: macOS-latest
-            TARGET: macos
-          - os: ubuntu-latest
-            TARGET: linux
-          - os: windows-latest
-            TARGET: windows
-
-    steps:
-      - uses: actions/checkout@v1
-      - uses: dart-lang/setup-dart@v1.5.0
-
-      - run: dart pub get
-      - run: dart pub run build_runner build --delete-conflicting-outputs
-      - run: dart analyze --fatal-infos --fatal-warnings .
-      - run: dart test
+    uses: ./.github/workflows/common-tests.yml

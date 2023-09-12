@@ -1,60 +1,79 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:cli_util/cli_logging.dart' as log;
-import 'package:io/ansi.dart';
+import 'package:dart_console/dart_console.dart';
+import 'package:fvm/src/utils/context.dart';
+import 'package:interact/interact.dart';
+import 'package:mason_logger/mason_logger.dart';
+import 'package:tint/tint.dart';
 
 /// Sets default logger mode
-log.Logger logger = log.Logger.standard();
+FvmLogger get logger => ctx.get<FvmLogger>();
 
-/// Logger for FVM
-class Logger {
-  Logger._();
-
-  /// Sets logger to verbose
-  static void setVerbose() {
-    logger = log.Logger.verbose();
+class FvmLogger extends Logger {
+  /// Constructor
+  FvmLogger({
+    super.level,
+  });
+  void get divider {
+    info(
+      '------------------------------------------------------------',
+    );
   }
 
-  /// Prints sucess message
-  static void fine(String message) {
-    print(cyan.wrap(message));
-    consoleController.fine.add(utf8.encode(message));
+  void get spacer {
+    info('');
   }
 
-  /// Prints [message] with warning formatting
-  static void warning(String message) {
-    print(yellow.wrap(message));
-    consoleController.warning.add(utf8.encode(message));
+  bool get isVerbose => logger.level == Level.verbose;
+
+  void complete(String message) {
+    info('${Icons.success.green()} $message');
   }
 
-  /// Prints [message] with info formatting
-  static void info(String message) {
-    print(message);
-    consoleController.info.add(utf8.encode(message));
+  void fail(String message) {
+    info('${Icons.failure.red()} $message');
   }
 
-  /// Prints [message] with error formatting
-  static void error(String message) {
-    print(red.wrap(message));
-    consoleController.error.add(utf8.encode(message));
+  @override
+  bool confirm(String? message, {bool? defaultValue}) {
+    // When running tests, always return true.
+    if (ctx.isTest) return true;
+
+    return Confirm(prompt: message ?? '', defaultValue: defaultValue)
+        .interact();
   }
 
-  /// Prints a line space
-  static void spacer() {
-    print('');
-    consoleController.info.add(utf8.encode(''));
+  String select(
+    String? message, {
+    required List<String> options,
+  }) {
+    final selection = Select(
+      prompt: message ?? '',
+      options: options,
+    ).interact();
+
+    return options[selection];
   }
 
-  /// Prints a divider
-  static void divider() {
-    const line = '___________________________________________________\n';
+  void notice(String message) {
+    // Add 2 due to the warning icon.
 
-    print(line);
-    consoleController.info.add(utf8.encode(line));
+    final label = '${Icons.warning} $message'.yellow();
+
+    final table = Table()
+      ..insertRow([label])
+      ..borderColor = ConsoleColor.yellow
+      ..borderType = BorderType.outline
+      ..borderStyle = BorderStyle.square;
+
+    // print(yellow.wrap(border));
+    // info('$pipe $warningIcon $message $pipe');
+    // print(yellow.wrap(border));
+    logger.write(table.toString());
   }
 }
 
+/// Logger for FVM
 /// Console controller instance
 final consoleController = ConsoleController();
 
@@ -77,4 +96,37 @@ class ConsoleController {
 
   /// error stream
   final error = StreamController<List<int>>();
+}
+
+class Icons {
+  const Icons._();
+  // Success: ✓
+  static String get success => '✓';
+
+  // Failure: ✗
+  static String get failure => '✗';
+
+  // Information: ℹ
+  static String get info => 'ℹ';
+
+  // Warning: ⚠
+  static String get warning => '⚠';
+
+  // Arrow Right: →
+  static String get arrowRight => '→';
+
+  // Arrow Left: ←
+  static String get arrowLeft => '←';
+
+  // Check Box: ☑
+  static String get checkBox => '☑';
+
+  // Star: ★
+  static String get star => '★';
+
+  // Circle: ●
+  static String get circle => '●';
+
+  // Square: ■
+  static String get square => '■';
 }

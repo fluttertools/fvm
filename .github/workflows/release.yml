@@ -7,30 +7,7 @@ on:
 
 jobs:
   test:
-    name: "${{ matrix.sdk-version }} / ${{ matrix.os }}"
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-        sdk-version: [stable] #, dev]
-        include:
-          - os: macOS-latest
-            TARGET: macos
-          - os: ubuntu-latest
-            TARGET: linux
-          - os: windows-latest
-            TARGET: windows
-
-    steps:
-      - uses: actions/checkout@v1
-      - uses: dart-lang/setup-dart@v1.5.0
-
-      - name: Install dependencies
-        run: dart pub get
-
-      - name: Run Test and Builder
-        run: dart pub run build_runner test --delete-conflicting-outputs
-
+    uses: ./.github/workflows/common-tests.yml
   release:
     name: Release
     needs: test
@@ -42,11 +19,10 @@ jobs:
       - uses: actions/checkout@v1
       - uses: dart-lang/setup-dart@v1.5.0
 
-      - name: Install dependencies
-        run: dart pub get
+      - run: dart pub get
 
-      - name: Build Version Number
-        run: dart pub run build_runner build --delete-conflicting-outputs
+      - name: Run tests
+        uses: ./.github/workflows/common-tests.yml
 
       - name: Deploy Github
         run: dart pub run grinder pkg-github-all

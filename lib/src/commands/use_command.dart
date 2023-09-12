@@ -1,11 +1,12 @@
 import 'package:args/command_runner.dart';
+import 'package:fvm/fvm.dart';
+import 'package:fvm/src/services/releases_service/releases_client.dart';
+import 'package:fvm/src/workflows/ensure_cache.workflow.dart';
+import 'package:fvm/src/workflows/flutter_setup.workflow.dart';
+import 'package:fvm/src/workflows/validate_flutter_version.dart';
 import 'package:io/io.dart';
 
-import '../models/valid_version_model.dart';
-import '../services/flutter_tools.dart';
-import '../services/git_tools.dart';
-import '../services/ide_service.dart';
-import '../services/project_service.dart';
+import '../models/flutter_version_model.dart';
 import '../utils/console_utils.dart';
 import '../utils/logger.dart';
 import '../workflows/use_version.workflow.dart';
@@ -45,9 +46,8 @@ class UseCommand extends BaseCommand {
         defaultsTo: null,
       )
       ..addFlag(
-        'config-vsc',
-        help: 'Configures VSCode to use FVM',
-        abbr: 'c',
+        'skip-setup',
+        help: 'Skips Flutter setup after install',
         negatable: false,
       );
   }
@@ -56,13 +56,15 @@ class UseCommand extends BaseCommand {
     final forceOption = boolArg('force');
     final pinOption = boolArg('pin');
     final flavorOption = stringArg('flavor');
-    final configVSC = boolArg('config-vsc');
+    final skipSetup = boolArg('skip-setup');
 
     String? version;
 
+    final project = await ProjectService.instance.findAncestor();
+
     // If no version was passed as argument check project config.
     if (argResults!.rest.isEmpty) {
-      version = await ProjectService.findVersion();
+      version = project.pinnedVersion;
 
       // If no config found, ask which version to select.
       version ??= await cacheVersionSelector();
@@ -71,10 +73,8 @@ class UseCommand extends BaseCommand {
     // Get version from first arg
     version ??= argResults!.rest[0];
 
-    // throw UsageException('Usage exception', usage.);
-
     // Get valid flutter version. Force version if is to be pinned.
-    var validVersion = ValidVersion(version);
+    var validVersion = await validateFlutterVersion(version);
 
     /// Cannot pin master channel
     if (pinOption && validVersion.isMaster) {
@@ -86,25 +86,36 @@ class UseCommand extends BaseCommand {
 
     /// Pin release to channel
     if (pinOption && validVersion.isChannel) {
-      Logger.info(
+      logger.info(
         'Pinning version $validVersion fron "$version" release channel...',
       );
-      validVersion = await FlutterTools.inferReleaseFromChannel(validVersion);
+
+      final release = await FlutterReleasesClient.getLatestReleaseOfChannel(
+          FlutterChannel.fromName(version));
+
+      validVersion = FlutterVersion.parse(release.version);
     }
 
-    if (configVSC) {
-      await IDEService.configureVsCodeSettings();
-    }
-
-    // Checks if should write gitignore file
-    await GitTools.writeGitIgnore();
+    final cacheVersion = await ensureCacheWorkflow(validVersion);
 
     /// Run use workflow
     await useVersionWorkflow(
-      validVersion,
+      version: cacheVersion,
+      project: project,
       force: forceOption,
       flavor: flavorOption,
     );
+
+    if (!skipSetup) {
+      await setupFlutterWorkflow(
+        version: cacheVersion,
+      );
+
+      await resolveDependenciesWorkflow(
+        version: cacheVersion,
+        project: project,
+      );
+    }
 
     return ExitCode.success.code;
   }

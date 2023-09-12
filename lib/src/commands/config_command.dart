@@ -1,9 +1,9 @@
+import 'package:fvm/src/utils/logger.dart';
 import 'package:io/ansi.dart';
 import 'package:io/io.dart';
 
-import '../services/context.dart';
 import '../services/settings_service.dart';
-import '../utils/logger.dart';
+import '../utils/context.dart';
 import 'base_command.dart';
 
 /// Fvm Config
@@ -39,37 +39,45 @@ class ConfigCommand extends BaseCommand {
 
     // Cache path was set
     if (argResults!.wasParsed('cache-path')) {
-      ctx.settings.cachePath = stringArg('cache-path');
+      ctx.settings!.cachePath = stringArg('cache-path');
       shouldSave = true;
     }
 
     // Git cache option has changed
     if (argResults!.wasParsed('git-cache')) {
-      ctx.settings.gitCacheDisabled = !boolArg('git-cache');
+      ctx.settings!.gitCacheDisabled = !boolArg('git-cache');
       shouldSave = true;
     }
 
     // Save
     if (shouldSave) {
+      final updateProgress = logger.progress('Saving settings');
       // Update settings
-      await ctx.settings.save();
-      Logger.fine('Settings saved.');
+      try {
+        await ctx.settings!.save();
+      } catch (error) {
+        updateProgress.fail('Failed to save settings');
+        return ExitCode.config.code;
+      }
+      updateProgress.complete('Settings saved.');
     } else {
-      Logger.spacer();
-      Logger.fine('FVM Settings:');
-      Logger.info('Located at ${SettingsService.settingsFile.path}\n');
+      logger
+        ..info('')
+        ..info('FVM Settings:')
+        ..info('Located at ${SettingsService.settingsFile.path}')
+        ..info('');
 
-      final options = ctx.settings.toMap();
+      final options = ctx.settings!.toMap();
 
       if (options.keys.isEmpty) {
-        Logger.info('No settings have been configured.\n');
+        logger.info('No settings have been configured.');
       } else {
         // Print options and it's values
         for (var key in options.keys) {
           final value = options[key];
           if (value != null) {
             final valuePrint = yellow.wrap(value.toString());
-            Logger.info('$key: $valuePrint');
+            logger.info('$key: $valuePrint');
           }
         }
       }

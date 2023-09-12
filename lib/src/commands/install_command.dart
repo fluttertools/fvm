@@ -1,11 +1,10 @@
 import 'dart:async';
 
+import 'package:fvm/src/workflows/flutter_setup.workflow.dart';
+import 'package:fvm/src/workflows/validate_flutter_version.dart';
 import 'package:io/io.dart';
 
 import '../../exceptions.dart';
-import '../../fvm.dart';
-import '../models/valid_version_model.dart';
-import '../services/flutter_tools.dart';
 import '../services/project_service.dart';
 import '../workflows/ensure_cache.workflow.dart';
 import 'base_command.dart';
@@ -28,26 +27,26 @@ class InstallCommand extends BaseCommand {
   /// Constructor
   InstallCommand() {
     argParser.addFlag(
-      'skip-setup',
-      help: 'Skips Flutter setup after install',
+      'setup',
+      help: 'Builds SDK after install after install',
       abbr: 's',
+      defaultsTo: false,
       negatable: false,
     );
   }
 
   @override
   Future<int> run() async {
-    CacheVersion cacheVersion;
-    final skipSetup = boolArg('skip-setup');
+    final setup = boolArg('setup');
     String? version;
 
     // If no version was passed as argument check project config.
     if (argResults!.rest.isEmpty) {
-      version = await ProjectService.findVersion();
+      version = await ProjectService.instance.findVersion();
 
       // If no config found is version throw error
       if (version == null) {
-        throw const FvmUsageException(
+        throw const AppException(
           'Please provide a channel or a version, or run'
           ' this command in a Flutter project that has FVM configured.',
         );
@@ -55,12 +54,17 @@ class InstallCommand extends BaseCommand {
     }
     version ??= argResults!.rest[0];
 
-    final validVersion = ValidVersion(version);
-    cacheVersion =
-        await ensureCacheWorkflow(validVersion, skipConfirmation: true);
+    final validVersion = await validateFlutterVersion(version);
 
-    if (!skipSetup) {
-      await FlutterTools.setupSdk(cacheVersion);
+    final cacheVersion = await ensureCacheWorkflow(
+      validVersion,
+      shouldInstall: true,
+    );
+
+    if (setup) {
+      await setupFlutterWorkflow(
+        version: cacheVersion,
+      );
     }
 
     return ExitCode.success.code;

@@ -1,10 +1,9 @@
 import 'dart:convert';
 
+import 'package:fvm/src/version.g.dart';
+
 import '../services/settings_service.dart';
 import '../utils/pretty_json.dart';
-import '../version.dart';
-
-const _defaultDurationHours = 24;
 
 /// Settings Dto
 class SettingsDto {
@@ -17,19 +16,11 @@ class SettingsDto {
   /// If uses local git cache
   bool gitCacheDisabled;
 
-  /// Last git cache update
-  DateTime? lastGitCacheUpdate;
-
-  /// Duration until next git cache update
-  Duration gitCacheUpdateInterval;
-
   /// Constructor
   SettingsDto._({
     this.cachePath,
     this.version,
-    this.lastGitCacheUpdate,
     this.gitCacheDisabled = true,
-    this.gitCacheUpdateInterval = const Duration(hours: _defaultDurationHours),
   });
 
   /// Empty FvmSettings constructor
@@ -53,32 +44,11 @@ class SettingsDto {
       gitCacheDisabled = map['gitCacheDisabled'] as bool? ?? false;
     }
 
-// Interval in hours for gitCacheUpdate
-    final updateIntervalHours = map['gitCacheUpdateInterval'] as int?;
-
     return SettingsDto._(
       cachePath: map['cachePath'] as String?,
       version: map['version'] as String?,
       gitCacheDisabled: gitCacheDisabled,
-      lastGitCacheUpdate: map['lastGitCacheUpdate'] == null
-          ? null
-          : DateTime.parse(map['lastGitCacheUpdate'] as String),
-      gitCacheUpdateInterval: Duration(
-        hours: updateIntervalHours ?? _defaultDurationHours,
-      ),
     );
-  }
-
-  /// Returns the next date to update the git cache
-  DateTime? get nextGitCacheUpdate {
-    return lastGitCacheUpdate?.add(gitCacheUpdateInterval);
-  }
-
-  /// Returns if git cache should be updated
-  bool get shouldUpdateGitCache {
-    return lastGitCacheUpdate == null ||
-        nextGitCacheUpdate == null ||
-        DateTime.now().isAfter(nextGitCacheUpdate!);
   }
 
   /// Saves settings dto locally
@@ -95,8 +65,6 @@ class SettingsDto {
       'cachePath': cachePath,
       'version': version,
       'gitCacheDisabled': gitCacheDisabled,
-      'lastGitCacheUpdate': lastGitCacheUpdate?.toIso8601String(),
-      'gitCacheUpdateInterval': gitCacheUpdateInterval.inHours,
     };
   }
 }

@@ -1,58 +1,62 @@
-import '../../constants.dart';
-import '../../exceptions.dart';
-import '../models/valid_version_model.dart';
-import '../services/cache_service.dart';
-import '../services/flutter_tools.dart';
-import '../services/project_service.dart';
+import 'dart:io';
+
+import 'package:fvm/src/models/cache_flutter_version_model.dart';
+import 'package:fvm/src/models/project_model.dart';
+import 'package:fvm/src/utils/helpers.dart';
+import 'package:fvm/src/utils/which.dart';
+import 'package:fvm/src/workflows/update_project_version.workflow.dart';
+import 'package:mason_logger/mason_logger.dart';
+
 import '../utils/logger.dart';
-import 'ensure_cache.workflow.dart';
 
 /// Checks if version is installed, and installs or exits
-Future<void> useVersionWorkflow(
-  ValidVersion validVersion, {
+Future<void> useVersionWorkflow({
+  required CacheFlutterVersion version,
+  required Project project,
   bool force = false,
   String? flavor,
 }) async {
-  // Get project from working directory
-  final project = await ProjectService.getByDirectory(kWorkingDirectory);
-
   // If project use check that is Flutter project
-  if (!project.isFlutterProject && !force) {
-    throw const FvmUsageException(
-      'Not a Flutter project. Run this FVM command at'
-      ' the root of a Flutter project or use --force to bypass this.',
+  if (!project.isFlutter && !force) {
+    final proceed = logger.confirm(
+      'You are running "use" on a project that does not use Flutter. Would you like to continue?',
     );
+
+    if (!proceed) exit(ExitCode.success.code);
   }
 
   // Run install workflow
-  final cacheVersion = await ensureCacheWorkflow(validVersion);
-
-  // Ensure that flutter tool is installed
-  if (!CacheService.isCacheVersionSetup(cacheVersion)) {
-    await FlutterTools.setupSdk(cacheVersion);
-  }
-
-  await ProjectService.pinVersion(
+  updateSdkVersionWorkflow(
     project,
-    validVersion,
+    version.name,
     flavor: flavor,
   );
 
-  final dartToolVersion = await ProjectService.getDartToolVersion(project);
-  final flutterSdkVersion = CacheService.getSdkVersionSync(cacheVersion);
-
-  if (dartToolVersion != flutterSdkVersion) {
-    // Run pub get after pinning version
-    await FlutterTools.pubGet(cacheVersion);
-  }
-
+  final versionLabel = cyan.wrap(version.printFriendlyName);
   // Different message if configured environment
   if (flavor != null) {
-    Logger.fine(
-      'Project now uses Flutter [$validVersion]'
-      ' on [$flavor] flavor.',
+    logger.complete(
+      'Project now uses Flutter SDK: $versionLabel on [$flavor] flavor.',
     );
   } else {
-    Logger.fine('Project now uses Flutter [$validVersion]');
+    logger.complete(
+      'Project now uses Flutter SDK : $versionLabel',
+    );
   }
+
+  if (version.flutterExec == which('flutter')) {
+    logger.detail('Flutter SDK is already in your PATH');
+    return;
+  }
+
+  if (isVsCode()) {
+    logger
+      ..spacer
+      ..notice(
+        'Running on VsCode, please restart the terminal to apply changes.',
+      )
+      ..info('You can then use "flutter" command within the VsCode terminal.');
+  }
+
+  return;
 }

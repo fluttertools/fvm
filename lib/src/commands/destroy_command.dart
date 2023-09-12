@@ -1,8 +1,10 @@
+import 'dart:io';
+
+import 'package:fvm/constants.dart';
+import 'package:fvm/src/utils/logger.dart';
 import 'package:io/io.dart';
 
-import '../services/context.dart';
-import '../utils/console_utils.dart';
-import '../utils/logger.dart';
+import '../utils/context.dart';
 import 'base_command.dart';
 
 /// Destroy FVM cache by deleting all Flutter SDK versions
@@ -18,13 +20,16 @@ class DestroyCommand extends BaseCommand {
 
   @override
   Future<int> run() async {
-    if (await confirm(
-      'Are you sure you want to destroy the directory "${ctx.fvmHome.path}" ?',
-      defaultConfirmation: false,
+    if (logger.confirm(
+      'Are you sure you want to destroy the directory "${ctx.fvmDir}" ?',
+      defaultValue: false,
     )) {
-      if (ctx.fvmHome.existsSync()) {
-        ctx.fvmHome.deleteSync(recursive: true);
-        Logger.fine('FVM Directory ${ctx.fvmHome.path}\n has been deleted');
+      final fvmDir = Directory(ctx.fvmDir);
+      if (fvmDir.existsSync()) {
+        fvmDir.deleteSync(recursive: true);
+        logger.complete(
+          '$kPackageName Directory ${fvmDir.path} has been deleted',
+        );
       }
     }
 
