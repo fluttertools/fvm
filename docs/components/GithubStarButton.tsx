@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export default function GithubStartButton() {
+export default function GithubStarButton() {
   return (
     <Link href="https://github.com/leoafarias/fvm">
       <img
