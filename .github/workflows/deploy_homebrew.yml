@@ -1,35 +1,24 @@
-# This is a basic workflow that is manually triggered
+name: Deploy Homebrew
 
-name: Homebrew Deploy
-
-# Controls when the action will run. Workflow runs when manually triggered using the UI
-# or API.
 on:
-  workflow_dispatch:
-  release:
-    types: [published, released]
+    workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  deploy:
-    name: Deploy Homebrew
-    runs-on: ubuntu-latest
-    env:
-      PUB_CREDENTIALS: ${{ secrets.PUB_CREDENTIALS }}
-      GITHUB_TOKEN: ${{ secrets.HOMEBREW_FVM_GH_TOKEN }}
+    deploy-homebrew:
+        name: Update Homebrew
+        runs-on: macos-latest
+        env:
+            PUB_CREDENTIALS: ${{ secrets.PUB_CREDENTIALS }}
+            GITHUB_TOKEN: ${{ secrets.HOMEBREW_FVM_GH_TOKEN }}
+        steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+  
+          - name: Prepare environment
+            uses: ./.github/actions/prepare
 
-    steps:
-      - uses: actions/checkout@v1
-      - name: Setup Dart
-        uses: DanTup/gh-actions/setup-dart@master
-        with:
-          channel: stable
+          - name: Deploy homebrew
+            run: dart run grinder pkg-homebrew-update
 
-      - name: Install dependencies
-        run: dart pub get
 
-      - name: Run tests
-        uses: ./.github/workflows/common-tests.yml
-
-      - name: Deploy to Homebrew
-        run: dart pub run grinder pkg-homebrew-update
+            

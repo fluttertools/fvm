@@ -1,14 +1,12 @@
 import 'package:args/command_runner.dart';
 import 'package:fvm/fvm.dart';
 import 'package:fvm/src/services/releases_service/releases_client.dart';
+import 'package:fvm/src/utils/helpers.dart';
 import 'package:fvm/src/workflows/ensure_cache.workflow.dart';
-import 'package:fvm/src/workflows/flutter_setup.workflow.dart';
-import 'package:fvm/src/workflows/validate_flutter_version.dart';
 import 'package:io/io.dart';
 
-import '../models/flutter_version_model.dart';
+import '../services/logger_service.dart';
 import '../utils/console_utils.dart';
-import '../utils/logger.dart';
 import '../workflows/use_version.workflow.dart';
 import 'base_command.dart';
 
@@ -20,9 +18,6 @@ class UseCommand extends BaseCommand {
   @override
   String description =
       'Sets Flutter SDK Version you would like to use in a project';
-
-  @override
-  String get invocation => 'fvm use {version}';
 
   /// Constructor
   UseCommand() {
@@ -44,6 +39,7 @@ class UseCommand extends BaseCommand {
         'flavor',
         help: 'Sets version for a project flavor',
         defaultsTo: null,
+        aliases: ['env'],
       )
       ..addFlag(
         'skip-setup',
@@ -60,43 +56,58 @@ class UseCommand extends BaseCommand {
 
     String? version;
 
-    final project = await ProjectService.instance.findAncestor();
+    final project = ProjectService.fromContext.findAncestor();
 
     // If no version was passed as argument check project config.
     if (argResults!.rest.isEmpty) {
-      version = project.pinnedVersion;
-
+      version = project.pinnedVersion?.name;
+      final versions = await CacheService.fromContext.getAllVersions();
       // If no config found, ask which version to select.
-      version ??= await cacheVersionSelector();
+      version ??= await cacheVersionSelector(versions);
     }
 
     // Get version from first arg
     version ??= argResults!.rest[0];
 
     // Get valid flutter version. Force version if is to be pinned.
-    var validVersion = await validateFlutterVersion(version);
+    if (pinOption) {
+      if (!isFlutterChannel(version) || version == 'master') {
+        throw UsageException(
+          'Cannot pin a version that is not in dev, beta or stable channels.',
+          usage,
+        );
+      }
 
-    /// Cannot pin master channel
-    if (pinOption && validVersion.isMaster) {
-      throw UsageException(
-        'Cannot pin a version from "master" channel.',
-        usage,
-      );
-    }
+      /// Pin release to channel
+      final channel = FlutterChannel.fromName(version);
 
-    /// Pin release to channel
-    if (pinOption && validVersion.isChannel) {
+      final release = await FlutterReleases.getLatestReleaseOfChannel(channel);
+
       logger.info(
-        'Pinning version $validVersion fron "$version" release channel...',
+        'Pinning version ${release.version} from "$version" release channel...',
       );
 
-      final release = await FlutterReleasesClient.getLatestReleaseOfChannel(
-          FlutterChannel.fromName(version));
-
-      validVersion = FlutterVersion.parse(release.version);
+      version = release.version;
     }
 
-    final cacheVersion = await ensureCacheWorkflow(validVersion);
+    // Gets flavor version
+    final flavorVersion = project.flavors[version];
+
+    if (flavorVersion != null) {
+      if (flavorOption != null) {
+        throw UsageException(
+          'Cannot use the --flavor when using fvm use {flavor}',
+          usage,
+        );
+      }
+
+      logger.info(
+        'Using Flutter SDK from "$flavorOption" which is "$flavorVersion"',
+      );
+      version = flavorVersion;
+    }
+
+    final cacheVersion = await ensureCacheWorkflow(version);
 
     /// Run use workflow
     await useVersionWorkflow(
@@ -104,19 +115,12 @@ class UseCommand extends BaseCommand {
       project: project,
       force: forceOption,
       flavor: flavorOption,
+      skipSetup: skipSetup,
     );
-
-    if (!skipSetup) {
-      await setupFlutterWorkflow(
-        version: cacheVersion,
-      );
-
-      await resolveDependenciesWorkflow(
-        version: cacheVersion,
-        project: project,
-      );
-    }
 
     return ExitCode.success.code;
   }
+
+  @override
+  String get invocation => 'fvm use {version}';
 }

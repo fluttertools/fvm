@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:fvm/src/utils/context.dart';
 import 'package:path/path.dart';
 
 const kPackageName = 'fvm';
@@ -10,41 +9,49 @@ const kDescription =
 /// Project directory for fvm
 const kFvmDirName = '.fvm';
 
+const kFvmDocsUrl = 'https://fvm.app';
+const kFvmDocsConfigUrl = '$kFvmDocsUrl/docs/config';
+
+const kDefaultFlutterUrl = 'https://github.com/flutter/flutter.git';
+
 /// Project fvm config file name
-final kFvmConfigFileName = 'fvm_config.json';
+const kFvmConfigFileName = '.fvmrc';
+
+/// Project fvm config file name
+const kFvmLegacyConfigFileName = 'fvm_config.json';
+
+/// Vscode name
+const kVsCode = 'VSCode';
+
+/// IntelliJ name
+const kIntelliJ = 'IntelliJ (Android Studio, ...)';
 
 /// Environment variables
-final kEnvVars = Platform.environment;
+final _env = Platform.environment;
 
 // Extension per platform
-String _binExt = Platform.isWindows ? '.bat' : '';
+final _execExtension = Platform.isWindows ? '.bat' : '';
 
 /// Flutter executable file name
-String flutterBinFileName = 'flutter$_binExt';
+final flutterExecFileName = 'flutter$_execExtension';
 
 /// Dart executable file name
-String dartBinFileName = 'dart$_binExt';
+String dartExecFileName = 'dart$_execExtension';
 
 /// User Home Path
-String get kUserHome {
-  if (Platform.isWindows) {
-    return kEnvVars['USERPROFILE']!;
-  } else {
-    return kEnvVars['HOME']!;
-  }
-}
+final kUserHome = Platform.isWindows ? _env['USERPROFILE']! : _env['HOME']!;
 
 /// FVM Home directory
-String get kFvmDirDefault => join(kUserHome, 'fvm');
+final kAppDirHome = join(kUserHome, kPackageName);
 
 /// Flutter Channels
 const kFlutterChannels = ['master', 'stable', 'dev', 'beta'];
 
-String applicationConfigHome() => join(_configHome, kPackageName);
+final kAppConfigFile = join(_configHome, kPackageName, kFvmConfigFileName);
 
 String get _configHome {
   if (Platform.isWindows) {
-    final appdata = ctx.environment['APPDATA'];
+    final appdata = _env['APPDATA'];
     if (appdata == null) {
       throw Exception('Environment variable %APPDATA% is not defined!');
     }
@@ -56,7 +63,7 @@ String get _configHome {
   }
 
   if (Platform.isLinux) {
-    final xdgConfigHome = ctx.environment['XDG_CONFIG_HOME'];
+    final xdgConfigHome = _env['XDG_CONFIG_HOME'];
     if (xdgConfigHome != null) {
       return xdgConfigHome;
     }

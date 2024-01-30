@@ -1,7 +1,9 @@
 import 'dart:io';
 
-import 'package:fvm/src/services/flutter_tools.dart';
-import 'package:fvm/src/utils/logger.dart';
+import 'package:fvm/src/services/config_repository.dart';
+import 'package:fvm/src/services/flutter_service.dart';
+import 'package:fvm/src/services/global_version_service.dart';
+import 'package:fvm/src/services/logger_service.dart';
 import 'package:mason_logger/mason_logger.dart';
 import 'package:path/path.dart';
 import 'package:scope/scope.dart';
@@ -15,94 +17,17 @@ final contextKey = ScopeKey<FVMContext>();
 ///
 /// Generators are allowed to return `null`, in which case the context will
 /// store the `null` value as the value for that type.
-typedef Generator = dynamic Function();
+typedef Generator = dynamic Function(FVMContext context);
 
 FVMContext get ctx => use(contextKey, withDefault: () => FVMContext.main);
 
+T getProvider<T>() => ctx.get();
+
 class FVMContext {
-  static FVMContext get main => FVMContext.create('MAIN');
-  factory FVMContext.create(
-    String name, {
-    String? fvmDir,
-    String? fvmVersionsDir,
-    String? workingDirectory,
-    bool? useGitCache,
-    String? gitCacheDir,
-    String? flutterRepo,
-    Map<Type, dynamic> overrides = const {},
-    bool isTest = false,
-  }) {
-    flutterRepo ??=
-        kEnvVars['FVM_GIT_CACHE'] ?? 'https://github.com/flutter/flutter.git';
-
-    final fvmDirHomeEnv = kEnvVars['FVM_HOME'];
-    if (fvmDirHomeEnv != null) {
-      fvmDir ??= normalize(fvmDirHomeEnv);
-    } else {
-      fvmDir ??= kFvmDirDefault;
-    }
-
-    fvmVersionsDir ??= join(fvmDir, 'versions');
-
-    gitCacheDir ??= join(fvmDir, 'cache.git');
-
-    final level = isTest ? Level.quiet : Level.info;
-
-    final generators = <Type, dynamic>{
-      FvmLogger: () => FvmLogger(level: level),
-      ProjectService: () => ProjectService(),
-      FlutterTools: () => FlutterTools(),
-      CacheService: () => CacheService(),
-      ...overrides,
-    };
-
-    return FVMContext._(
-      name,
-      fvmDir: fvmDir,
-      fvmVersionsDir: fvmVersionsDir,
-      workingDirectory: workingDirectory ?? Directory.current.path,
-      useGitCache: useGitCache ?? true,
-      isTest: isTest,
-      flutterRepo: flutterRepo,
-      gitCacheDir: gitCacheDir,
-      generators: generators,
-    );
-  }
-
-  /// Constructor
-  /// If nothing is provided set default
-  FVMContext._(
-    this.name, {
-    required this.fvmDir,
-    required this.fvmVersionsDir,
-    required this.workingDirectory,
-    required this.useGitCache,
-    required this.flutterRepo,
-    required this.gitCacheDir,
-    this.generators = const {},
-    this.isTest = false,
-  });
+  static FVMContext main = FVMContext.create();
 
   /// Name of the context
-  final String name;
-
-  /// Flutter Git Repo
-  final String flutterRepo;
-
-  /// Directory where FVM is stored
-  final String fvmDir;
-
-  /// Directory where FVM versions are stored
-  final String fvmVersionsDir;
-
-  /// Flag to determine if should use git cache
-  final bool useGitCache;
-
-  /// Directory for Flutter repo git cache
-  final String gitCacheDir;
-
-  /// Cached settings
-  SettingsDto? settings;
+  final String id;
 
   /// Working Directory for FVM
   final String workingDirectory;
@@ -110,77 +35,116 @@ class FVMContext {
   /// Flag to determine if context is running in a test
   final bool isTest;
 
+  /// App config
+  final AppConfig config;
+
+  /// Generators for dependencies
   final Map<Type, dynamic>? generators;
 
-  final Map<Type, dynamic> _generated = {};
+  /// Generated values
+  final Map<Type, dynamic> _dependencies = {};
 
-  /// File for FVM Settings
-  File get settingsFile {
-    return File(join(fvmDir, '.settings'));
-  }
-
-  /// Environment variables
-  Map<String, String> get environment => Platform.environment;
-
-  /// Where Default Flutter SDK is stored
-  Link get globalCacheLink => Link(join(fvmDir, 'default'));
-
-  /// Directory for Global Flutter SDK bin
-  String get globalCacheBinPath => join(globalCacheLink.path, 'bin');
-
-  T get<T>() {
-    if (_generated.containsKey(T)) {
-      return _generated[T] as T;
-    }
-    if (generators != null && generators!.containsKey(T)) {
-      final generator = generators![T] as Generator;
-      _generated[T] = generator();
-      return _generated[T];
-    }
-    throw Exception('Generator for $T not found');
-  }
-
-  FVMContext copyWith({
-    String? name,
+  factory FVMContext.create({
+    String? id,
+    AppConfig? configOverrides,
     String? workingDirectory,
-    String? fvmDir,
-    String? fvmVersionsDir,
-    bool? useGitCache,
-    String? flutterRepo,
-    String? gitCacheDir,
-    bool? isTest,
-    Map<Type, dynamic>? generators,
+    Map<Type, dynamic> overrides = const {},
+    bool isTest = false,
   }) {
+    workingDirectory ??= Directory.current.path;
+
+    // Load config from file in config path
+    final projectConfig = ProjectConfig.loadFromPath(workingDirectory);
+    final envConfig = ConfigRepository.loadEnv();
+    var appConfig = ConfigRepository.loadFile();
+
+    appConfig = appConfig.mergeConfig(envConfig).mergeConfig(projectConfig);
+
+    // Merge config from file with env config
+    final config = appConfig.merge(configOverrides);
+
+    final level = isTest ? Level.warning : Level.info;
+
     return FVMContext._(
-      name ?? this.name,
-      fvmDir: fvmDir ?? this.fvmDir,
-      fvmVersionsDir: fvmVersionsDir ?? this.fvmVersionsDir,
-      workingDirectory: workingDirectory ?? this.workingDirectory,
-      useGitCache: useGitCache ?? this.useGitCache,
-      flutterRepo: flutterRepo ?? this.flutterRepo,
-      gitCacheDir: gitCacheDir ?? this.gitCacheDir,
-      isTest: isTest ?? this.isTest,
+      id: id ?? 'MAIN',
+      workingDirectory: workingDirectory,
+      config: config,
+      isTest: isTest,
       generators: {
-        ...this.generators!,
-        if (generators != null) ...generators,
+        LoggerService: (context) => LoggerService(
+              level: level,
+              context: context,
+            ),
+        ProjectService: ProjectService.new,
+        FlutterService: FlutterService.new,
+        CacheService: CacheService.new,
+        GlobalVersionService: GlobalVersionService.new,
+        ...overrides,
       },
     );
   }
 
-  FVMContext merge([FVMContext? context]) {
-    return copyWith(
-      name: context?.name,
-      fvmDir: context?.fvmDir,
-      fvmVersionsDir: context?.fvmVersionsDir,
-      workingDirectory: context?.workingDirectory,
-      useGitCache: context?.useGitCache,
-      flutterRepo: context?.flutterRepo,
-      gitCacheDir: context?.gitCacheDir,
-      isTest: context?.isTest,
-      generators: context?.generators,
-    );
+  /// Constructor
+  /// If nothing is provided set default
+  FVMContext._({
+    required this.id,
+    required this.workingDirectory,
+    required this.config,
+    this.generators = const {},
+    this.isTest = false,
+  });
+
+  /// Environment variables
+  Map<String, String> get environment => Platform.environment;
+
+  /// Directory where FVM is stored
+  String get fvmDir => config.cachePath ?? kAppDirHome;
+
+  /// Flag to determine if should use git cache
+  bool get gitCache => config.useGitCache ?? true;
+
+  String get gitCachePath {
+    // If git cache is not overriden use default based on fvmDir
+    if (config.gitCachePath != null) return config.gitCachePath!;
+    return join(fvmDir, 'cache.git');
+  }
+
+  /// Flutter Git Repo
+  String get flutterUrl => config.flutterUrl ?? kDefaultFlutterUrl;
+
+  /// Last updated check
+  DateTime? get lastUpdateCheck => config.lastUpdateCheck;
+
+  /// Flutter SDK Path
+  bool get updateCheckDisabled => config.disableUpdateCheck ?? false;
+
+  /// Priviledged access
+  bool get priviledgedAccess => config.priviledgedAccess ?? true;
+
+  /// Where Default Flutter SDK is stored
+  String get globalCacheLink => join(fvmDir, 'default');
+
+  /// Directory for Global Flutter SDK bin
+  String get globalCacheBinPath => join(globalCacheLink, 'bin');
+
+  /// Directory where FVM versions are stored
+  String get versionsCachePath => join(fvmDir, 'versions');
+
+  /// Config path
+  String get configPath => kAppConfigFile;
+
+  T get<T>() {
+    if (_dependencies.containsKey(T)) {
+      return _dependencies[T] as T;
+    }
+    if (generators != null && generators!.containsKey(T)) {
+      final generator = generators![T] as Generator;
+      _dependencies[T] = generator(this);
+      return _dependencies[T];
+    }
+    throw Exception('Generator for $T not found');
   }
 
   @override
-  String toString() => name;
+  String toString() => id;
 }

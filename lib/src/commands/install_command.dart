@@ -1,7 +1,6 @@
 import 'dart:async';
 
-import 'package:fvm/src/workflows/flutter_setup.workflow.dart';
-import 'package:fvm/src/workflows/validate_flutter_version.dart';
+import 'package:fvm/src/workflows/setup_flutter.workflow.dart';
 import 'package:io/io.dart';
 
 import '../../exceptions.dart';
@@ -16,13 +15,6 @@ class InstallCommand extends BaseCommand {
 
   @override
   final description = 'Installs Flutter SDK Version';
-
-  @override
-  String get invocation => 'fvm install {version}, if no {version}'
-      ' is provided will install version configured in project.';
-
-  @override
-  List<String> get aliases => ['i'];
 
   /// Constructor
   InstallCommand() {
@@ -42,7 +34,7 @@ class InstallCommand extends BaseCommand {
 
     // If no version was passed as argument check project config.
     if (argResults!.rest.isEmpty) {
-      version = await ProjectService.instance.findVersion();
+      version = ProjectService.fromContext.findVersion();
 
       // If no config found is version throw error
       if (version == null) {
@@ -54,19 +46,22 @@ class InstallCommand extends BaseCommand {
     }
     version ??= argResults!.rest[0];
 
-    final validVersion = await validateFlutterVersion(version);
-
     final cacheVersion = await ensureCacheWorkflow(
-      validVersion,
+      version,
       shouldInstall: true,
     );
 
     if (setup) {
-      await setupFlutterWorkflow(
-        version: cacheVersion,
-      );
+      await setupFlutterWorkflow(cacheVersion);
     }
 
     return ExitCode.success.code;
   }
+
+  @override
+  String get invocation => 'fvm install {version}, if no {version}'
+      ' is provided will install version configured in project.';
+
+  @override
+  List<String> get aliases => ['i'];
 }

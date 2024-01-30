@@ -5,7 +5,7 @@ import 'package:fvm/src/services/releases_service/models/release.model.dart';
 import 'package:fvm/src/utils/http.dart';
 
 import '../../../exceptions.dart';
-import '../../utils/logger.dart';
+import '../logger_service.dart';
 import 'models/flutter_releases.model.dart';
 
 final _envVars = Platform.environment;
@@ -27,43 +27,39 @@ String getReleasesUrl(String platform) {
       'https://raw.githubusercontent.com/fluttertools/fvm/main/releases_$platform.json';
 }
 
-class FlutterReleasesClient {
-  FlutterReleasesClient._();
+class FlutterReleases {
+  static Releases? _cacheReleasesRes;
 
-  static FlutterReleases? _cacheReleasesRes;
+  const FlutterReleases._();
 
   /// Gets Flutter SDK Releases
   /// Can use memory [cache] if it exists.
-  static Future<FlutterReleases> get({
-    bool cache = true,
-    String? platform,
-  }) async {
+  static Future<Releases> get({bool cache = true, String? platform}) async {
     platform ??= Platform.operatingSystem;
     final releasesUrl = getReleasesUrl(platform);
     try {
       // If has been cached return
       if (_cacheReleasesRes != null && cache) {
-        return Future.value(_cacheReleasesRes);
+        return await Future.value(_cacheReleasesRes);
       }
+
       final response = await fetch(releasesUrl);
 
-      _cacheReleasesRes = FlutterReleases.fromJson(response);
-      return Future.value(_cacheReleasesRes);
+      _cacheReleasesRes = Releases.fromJson(response);
+      return await Future.value(_cacheReleasesRes);
     } on Exception catch (err) {
       logger.detail(err.toString());
       return _getFromFlutterUrl(platform);
     }
   }
 
-  static Future<FlutterReleases> _getFromFlutterUrl(
-    String platform,
-  ) async {
+  static Future<Releases> _getFromFlutterUrl(String platform) async {
     try {
       final response = await fetch(getFlutterReleasesUrl(platform));
-      _cacheReleasesRes = FlutterReleases.fromJson(response);
-      return Future.value(_cacheReleasesRes);
+      _cacheReleasesRes = Releases.fromJson(response);
+      return await Future.value(_cacheReleasesRes);
     } on Exception {
-      throw AppTracedException(
+      throw AppException(
         'Failed to retrieve the Flutter SDK from: ${getFlutterReleasesUrl(platform)}\n'
         'Fvm will use the value set on '
         'env FLUTTER_STORAGE_BASE_URL to check versions\n'

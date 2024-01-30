@@ -1,83 +1,85 @@
 import 'dart:io';
 
 import 'package:fvm/src/utils/context.dart';
+import 'package:fvm/src/utils/run_command.dart';
 
 import '../../fvm.dart';
 import 'helpers.dart';
 
+final _dartCmd = 'dart';
+final _flutterCmd = 'flutter';
+
 /// Runs Flutter cmd
-Future<int> runFlutter(
-  CacheFlutterVersion version,
+Future<ProcessResult> runFlutter(
   List<String> args, {
-  bool? showOutput,
-}) async {
-  // Run command
+  CacheFlutterVersion? version,
+  bool? echoOutput,
+  bool? throwOnError,
+}) {
+  if (version == null) {
+    return _runCmd(_flutterCmd, args: args);
+  }
   return _runOnVersion(
-    SdkType.flutter,
+    _flutterCmd,
     version,
     args,
-    showOutput: showOutput,
+    echoOutput: echoOutput,
+    throwOnError: throwOnError,
   );
 }
 
-/// Runs flutter from global version
-Future<int> runFlutterGlobal(List<String> args) {
-  return _runCmd('flutter', args: args);
-}
-
 /// Runs dart cmd
-Future<int> runDart(
-  CacheFlutterVersion version,
+Future<ProcessResult> runDart(
   List<String> args, {
-  bool? showOutput,
-}) async {
+  CacheFlutterVersion? version,
+  bool? echoOutput,
+  bool? throwOnError,
+}) {
+  if (version == null) {
+    return _runCmd(_dartCmd, args: args);
+  }
   return _runOnVersion(
-    SdkType.dart,
+    _dartCmd,
     version,
     args,
-    showOutput: showOutput,
+    echoOutput: echoOutput,
+    throwOnError: throwOnError,
   );
 }
 
-/// Runs dart from global version
-Future<int> runDartGlobal(List<String> args) async {
-  // Run command
-  return await _runCmd('dart', args: args);
-}
-
-enum SdkType {
-  dart,
-  flutter,
-}
-
 /// Runs dart cmd
-Future<int> _runOnVersion(
-  SdkType sdk,
+Future<ProcessResult> _runOnVersion(
+  String cmd,
   CacheFlutterVersion version,
   List<String> args, {
-  bool? showOutput,
+  bool? echoOutput,
+  bool? throwOnError,
 }) async {
-  final isFlutter = sdk == SdkType.flutter;
+  final isFlutter = cmd == _flutterCmd;
   // Get exec path for dart
   final execPath = isFlutter ? version.flutterExec : version.dartExec;
 
   // Update environment
-  final environment = updateEnvironmentVariables([
-    version.binPath,
-    version.dartBinPath,
-  ], ctx.environment);
+  final environment = updateEnvironmentVariables(
+    [
+      version.binPath,
+      version.dartBinPath,
+    ],
+    ctx.environment,
+  );
 
   // Run command
   return await _runCmd(
     execPath,
     args: args,
     environment: environment,
-    showOutput: showOutput,
+    echoOutput: echoOutput,
+    throwOnError: throwOnError,
   );
 }
 
 /// Exec commands with the Flutter env
-Future<int> execCmd(
+Future<ProcessResult> execCmd(
   String execPath,
   List<String> args,
   CacheFlutterVersion? version,
@@ -86,39 +88,33 @@ Future<int> execCmd(
   // If execPath is not provided will get the path configured version
   var environment = ctx.environment;
   if (version != null) {
-    environment = updateEnvironmentVariables([
-      version.binPath,
-      version.dartBinPath,
-    ], ctx.environment);
+    environment = updateEnvironmentVariables(
+      [
+        version.binPath,
+        version.dartBinPath,
+      ],
+      ctx.environment,
+    );
   }
 
   // Run command
-  return await _runCmd(
-    execPath,
-    args: args,
-    environment: environment,
-  );
+  return await _runCmd(execPath, args: args, environment: environment);
 }
 
-Future<int> _runCmd(
+Future<ProcessResult> _runCmd(
   String execPath, {
   List<String> args = const [],
   Map<String, String>? environment,
-
-  ///Show output defaults to true
-  bool? showOutput,
+  bool? echoOutput,
+  bool? throwOnError,
 }) async {
-  showOutput ??= true;
-  final process = await Process.start(
+  echoOutput ??= true;
+  throwOnError ??= false;
+  return await runCommand(
     execPath,
-    args,
-    runInShell: true,
+    args: args,
     environment: environment,
-    workingDirectory: ctx.workingDirectory,
-    mode: showOutput ? ProcessStartMode.inheritStdio : ProcessStartMode.normal,
+    throwOnError: throwOnError,
+    echoOutput: echoOutput,
   );
-
-  exitCode = await process.exitCode;
-
-  return exitCode;
 }

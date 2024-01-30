@@ -16,7 +16,7 @@ class FlutterVersion {
   final String name;
 
   /// Has a cannel which the version is part of
-  final String? releaseChannel;
+  final String? releaseFromChannel;
 
   /// Identifies if the version is an official Flutter SDK release.
   final bool isRelease;
@@ -33,38 +33,36 @@ class FlutterVersion {
   /// Constructs a [FlutterVersion] instance initialized with a given [name].
   const FlutterVersion(
     this.name, {
-    this.releaseChannel,
+    this.releaseFromChannel,
     required this.isRelease,
     required this.isCommit,
     required this.isChannel,
     required this.isCustom,
   });
 
-  FlutterVersion.commit(this.name)
+  const FlutterVersion.commit(this.name)
       : isRelease = false,
-        releaseChannel = null,
+        releaseFromChannel = null,
         isCommit = true,
         isChannel = false,
         isCustom = false;
 
-  FlutterVersion.channel(this.name)
+  const FlutterVersion.channel(this.name)
       : isRelease = false,
-        releaseChannel = null,
+        releaseFromChannel = null,
         isCommit = false,
         isChannel = true,
         isCustom = false;
 
-  FlutterVersion.custom(this.name)
+  const FlutterVersion.custom(this.name)
       : isRelease = false,
-        releaseChannel = null,
+        releaseFromChannel = null,
         isCommit = false,
         isChannel = false,
         isCustom = true;
 
-  FlutterVersion.release(
-    this.name, {
-    this.releaseChannel,
-  })  : isRelease = true,
+  const FlutterVersion.release(this.name, {this.releaseFromChannel})
+      : isRelease = true,
         isCommit = false,
         isChannel = false,
         isCustom = false;
@@ -75,7 +73,7 @@ class FlutterVersion {
     if (parts.length == 2) {
       final channel = parts.last;
       if (kFlutterChannels.contains(channel)) {
-        return FlutterVersion.release(version, releaseChannel: channel);
+        return FlutterVersion.release(version, releaseFromChannel: channel);
       }
 
       throw FormatException('Invalid version format');
@@ -99,13 +97,9 @@ class FlutterVersion {
     return FlutterVersion.release(version);
   }
 
-  String get version {
-    return name.split('@').first;
-  }
+  String get version => name.split('@').first;
 
-  bool get isMaster {
-    return isChannel && name == 'master';
-  }
+  bool get isMaster => name == 'master';
 
   /// Provides a human readable version identifier for UI presentation.
   ///
@@ -116,11 +110,11 @@ class FlutterVersion {
   String get printFriendlyName {
     // Uppercase
 
-    if (isChannel) return 'Channel: ${uppercase(name)}';
+    if (isChannel) return 'Channel: ${name.capitalize}';
 
-    if (isCommit) return 'Commit: $name';
+    if (isCommit) return 'Commit : $name';
 
-    return 'SDK Version: $name';
+    return 'SDK Version : $name';
   }
 
   /// Compares CacheVersion with [other]

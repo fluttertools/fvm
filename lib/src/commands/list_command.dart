@@ -1,11 +1,13 @@
 import 'package:dart_console/dart_console.dart';
+import 'package:fvm/src/services/global_version_service.dart';
+import 'package:fvm/src/services/releases_service/models/release.model.dart';
 import 'package:fvm/src/services/releases_service/releases_client.dart';
 import 'package:fvm/src/utils/helpers.dart';
 import 'package:mason_logger/mason_logger.dart';
 
 import '../services/cache_service.dart';
+import '../services/logger_service.dart';
 import '../utils/context.dart';
-import '../utils/logger.dart';
 import 'base_command.dart';
 
 /// List installed SDK Versions
@@ -16,15 +18,12 @@ class ListCommand extends BaseCommand {
   @override
   final description = 'Lists installed Flutter SDK Versions';
 
-  @override
-  List<String> get aliases => ['ls'];
-
   /// Constructor
   ListCommand();
 
   @override
   Future<int> run() async {
-    final cacheVersions = await CacheService.instance.getAllVersions();
+    final cacheVersions = await CacheService.fromContext.getAllVersions();
 
     if (cacheVersions.isEmpty) {
       logger
@@ -35,23 +34,30 @@ class ListCommand extends BaseCommand {
 
     // Print where versions are stored
     logger
-      ..info('Cache directory:  ${cyan.wrap(ctx.fvmVersionsDir)}')
+      ..info('Cache directory:  ${cyan.wrap(ctx.versionsCachePath)}')
       ..spacer;
 
-    final releases = await FlutterReleasesClient.get();
-    final globalVersion = CacheService.instance.getGlobal();
+    final releases = await FlutterReleases.get();
+    final globalVersion = GlobalVersionService.fromContext.getGlobal();
+
     final table = Table()
-      ..insertColumn(header: 'SDK', alignment: TextAlignment.left)
+      ..insertColumn(header: 'Version', alignment: TextAlignment.left)
       ..insertColumn(header: 'Channel', alignment: TextAlignment.left)
       ..insertColumn(header: 'Flutter Version', alignment: TextAlignment.left)
-      ..insertColumn(header: 'Dart  Version', alignment: TextAlignment.left)
+      ..insertColumn(header: 'Dart Version', alignment: TextAlignment.left)
       ..insertColumn(header: 'Release Date', alignment: TextAlignment.left)
-      ..insertColumn(header: 'Is Global', alignment: TextAlignment.left);
+      ..insertColumn(header: 'Global', alignment: TextAlignment.left);
 
     for (var version in cacheVersions) {
       var printVersion = version.name;
+      Release? latestRelease;
 
-      final release = releases.getReleaseFromVersion(version.name);
+      if (version.isChannel && !version.isMaster) {
+        latestRelease = releases.getLatestChannelRelease(version.name);
+      }
+
+      final release =
+          releases.getReleaseFromVersion(version.flutterSdkVersion ?? '');
 
       String releaseDate = '';
       String channel = '';
@@ -61,8 +67,20 @@ class ListCommand extends BaseCommand {
         channel = release.channel.name;
       }
 
-      if (version.notSetup) {
-        printVersion = '${version.name} \n${yellow.wrap('Need setup')}';
+      String flutterSdkVersion = version.flutterSdkVersion ?? '';
+
+      String getVersionOutput() {
+        if (version.notSetup) {
+          return flutterSdkVersion = '${yellow.wrap('Need setup')}';
+        }
+        if (latestRelease != null && version.isChannel) {
+          // If its not the latest version
+          if (latestRelease.version != version.flutterSdkVersion) {
+            return '$flutterSdkVersion $rightArrow ${(green.wrap(latestRelease.version))}';
+          }
+          return flutterSdkVersion;
+        }
+        return flutterSdkVersion;
       }
 
       table
@@ -70,14 +88,14 @@ class ListCommand extends BaseCommand {
           [
             printVersion,
             channel,
-            version.flutterSdkVersion ?? '',
+            getVersionOutput(),
             version.dartSdkVersion ?? '',
             releaseDate,
-            globalVersion == version ? green.wrap('Yes')! : red.wrap('No')!,
-          ]
+            globalVersion == version ? green.wrap(dot)! : '',
+          ],
         ])
         ..borderStyle = BorderStyle.square
-        ..borderColor = ConsoleColor.blue
+        ..borderColor = ConsoleColor.white
         ..borderType = BorderType.grid
         ..headerStyle = FontStyle.bold;
     }
@@ -85,4 +103,7 @@ class ListCommand extends BaseCommand {
 
     return ExitCode.success.code;
   }
+
+  @override
+  List<String> get aliases => ['ls'];
 }

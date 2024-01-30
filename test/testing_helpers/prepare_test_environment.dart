@@ -2,10 +2,15 @@ import 'dart:io';
 
 import 'package:fvm/constants.dart';
 import 'package:fvm/src/utils/context.dart';
+import 'package:io/io.dart';
 import 'package:path/path.dart';
 
-Directory getTempTestDir(String contextId, [String path = '']) {
-  return Directory(join(kUserHome, 'fvm-test', contextId, path));
+String getTempTestDir([String? contextId = '', String path = '']) {
+  return join(kUserHome, 'fvm-test', contextId, path);
+}
+
+String getTempTestProjectDir([String? contextId = '', String name = '']) {
+  return join(getTempTestDir(contextId, 'projects'), name);
 }
 
 String getSupportAssetDir(String name) {
@@ -25,46 +30,53 @@ Future<void> prepareLocalProjects(String toPath) async {
     final assetDirName = basename(assetDir.path);
     final tmpDir = Directory(join(toPath, assetDirName));
 
+    if (await tmpDir.exists()) {
+      await tmpDir.delete(recursive: true);
+    }
+
+    await tmpDir.create(recursive: true);
+
     // Copy assetDir to tmpDir
-    promises.add(copyDirectory(assetDir, tmpDir));
+    promises.add(copyPath(assetDir.path, tmpDir.path));
   }
 
   await Future.wait(promises);
 }
 
-Future<void> copyDirectory(Directory source, Directory target) async {
-  if (await target.exists()) {
-    await target.delete(recursive: true);
+Future<void> setUpContext(
+  FVMContext context, [
+  bool removeTempDir = true,
+]) async {
+  final tempPath = getTempTestDir(context.id);
+
+  final tempDir = Directory(tempPath);
+  final projects = Directory(getTempTestProjectDir(context.id));
+
+  if (projects.existsSync()) {
+    projects.deleteSync(recursive: true);
   }
 
-  await target.create(recursive: true);
-  await for (var entity in source.list(recursive: false)) {
-    if (entity is Directory) {
-      var newDir = Directory('${target.path}/${entity.uri.pathSegments.last}');
-      await newDir.create(recursive: true);
-      await copyDirectory(entity, newDir);
-    } else if (entity is File) {
-      await entity.copy('${target.path}/${entity.uri.pathSegments.last}');
-    }
-  }
-}
-
-Future<void> setUpContext(FVMContext context) async {
-  final tempDir = getTempTestDir(context.name);
-
-  if (tempDir.existsSync()) {
+  if (!tempDir.existsSync()) {
+    tempDir.createSync(recursive: true);
+  } else if (removeTempDir) {
     tempDir.deleteSync(recursive: true);
+    tempDir.createSync(recursive: true);
   }
 
-  tempDir.createSync(recursive: true);
-
-  await prepareLocalProjects(tempDir.path);
+  await prepareLocalProjects(projects.path);
 }
 
 void tearDownContext(FVMContext context) {
-  final tempDir = getTempTestDir(context.name);
+  // final tempPath = getTempTestDir(context.id);
 
-  if (tempDir.existsSync()) {
-    tempDir.deleteSync(recursive: true);
-  }
+  // final tempDir = Directory(tempPath);
+
+  // if (tempDir.existsSync()) {
+  //   try {
+  //     tempDir.deleteSync(recursive: true);
+  //   } on FileSystemException catch (e) {
+  //     // just log the erorr, as it can fail due to open files
+  //     logger.err(e.message);
+  //   }
+  // }
 }

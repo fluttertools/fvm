@@ -1,47 +1,54 @@
 import 'dart:io';
 
-import 'package:fvm/src/utils/logger.dart';
+import 'package:fvm/src/services/logger_service.dart';
+import 'package:fvm/src/utils/context.dart';
 
 Future<ProcessResult> runCommand(
   String command, {
+  List<String> args = const [],
+
   /// Listen for stdout and stderr
   String? workingDirectory,
   Map<String, String>? environment,
   bool throwOnError = true,
   bool echoOutput = false,
 }) async {
-  List<String> arguments = command.split(' ');
-  final processCommand = arguments.removeAt(0);
-
   logger
     ..detail('')
     ..detail('Running: $command')
     ..detail('');
+  ProcessResult processResult;
+  if (!echoOutput || ctx.isTest) {
+    processResult = await Process.run(
+      command,
+      args,
+      environment: environment,
+      runInShell: true,
+      workingDirectory: workingDirectory,
+    );
 
+    if (throwOnError) {
+      _throwIfProcessFailed(processResult, command, args);
+    }
+    return processResult;
+  }
   final process = await Process.start(
-    processCommand,
-    arguments,
+    command,
+    args,
     environment: environment,
     runInShell: true,
     workingDirectory: workingDirectory,
-    mode: echoOutput ? ProcessStartMode.inheritStdio : ProcessStartMode.normal,
+    mode: ProcessStartMode.inheritStdio,
   );
 
-  final results = await Future.wait([
-    process.exitCode,
-    process.stdout.transform(const SystemEncoding().decoder).join(),
-    process.stderr.transform(const SystemEncoding().decoder).join(),
-  ]);
-
-  final processResult = ProcessResult(
+  processResult = ProcessResult(
     process.pid,
-    results[0] as int,
-    echoOutput ? null : results[1] as String,
-    echoOutput ? null : results[2] as String,
+    await process.exitCode,
+    null,
+    null,
   );
-
   if (throwOnError) {
-    _throwIfProcessFailed(processResult, processCommand, arguments);
+    _throwIfProcessFailed(processResult, command, args);
   }
   return processResult;
 }
@@ -53,8 +60,8 @@ void _throwIfProcessFailed(
 ) {
   if (pr.exitCode != 0) {
     final values = {
-      if (pr.stdout != null) 'Standard out': pr.stdout.toString().trim(),
-      if (pr.stderr != null) 'Standard error': pr.stderr.toString().trim(),
+      if (pr.stdout != null) 'stdout': pr.stdout.toString().trim(),
+      if (pr.stderr != null) 'stderr': pr.stderr.toString().trim(),
     }..removeWhere((k, v) => v.isEmpty);
 
     String message;
@@ -63,7 +70,11 @@ void _throwIfProcessFailed(
     } else if (values.length == 1) {
       message = values.values.single;
     } else {
-      message = values.entries.map((e) => '${e.key}\n${e.value}').join('\n');
+      if (values['stderr'] != null) {
+        message = values['stderr']!;
+      } else {
+        message = values['stdout']!;
+      }
     }
 
     throw ProcessException(process, args, message, pr.exitCode);

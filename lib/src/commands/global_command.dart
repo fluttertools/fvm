@@ -1,11 +1,14 @@
+import 'package:fvm/constants.dart';
 import 'package:fvm/src/models/cache_flutter_version_model.dart';
-import 'package:fvm/src/models/flutter_version_model.dart';
+import 'package:fvm/src/services/global_version_service.dart';
+import 'package:fvm/src/services/logger_service.dart';
 import 'package:fvm/src/services/project_service.dart';
 import 'package:fvm/src/utils/console_utils.dart';
 import 'package:fvm/src/utils/context.dart';
-import 'package:fvm/src/utils/logger.dart';
+import 'package:fvm/src/utils/helpers.dart';
 import 'package:fvm/src/utils/which.dart';
 import 'package:mason_logger/mason_logger.dart';
+import 'package:tint/tint.dart';
 
 import '../services/cache_service.dart';
 import '../workflows/ensure_cache.workflow.dart';
@@ -23,40 +26,36 @@ class GlobalCommand extends BaseCommand {
   GlobalCommand();
 
   @override
-  String get invocation => 'fvm global {version}';
-
-  @override
   Future<int> run() async {
     String? version;
 
     // Show chooser if not version is provided
     if (argResults!.rest.isEmpty) {
-      version = await cacheVersionSelector();
+      final versions = await CacheService.fromContext.getAllVersions();
+      version = await cacheVersionSelector(versions);
     }
 
     // Get first arg if it was not empty
     version ??= argResults!.rest[0];
 
-    // Get valid flutter version
-    final validVersion = FlutterVersion.parse(version);
-
     // Ensure version is installed
-    final cacheVersion = await ensureCacheWorkflow(validVersion);
+    final cacheVersion = await ensureCacheWorkflow(version);
 
     // Sets version as the global
-    CacheService.instance.setGlobal(cacheVersion);
+    GlobalVersionService.fromContext.setGlobal(cacheVersion);
 
-    final flutterInPath = which('flutter');
+    final flutterInPath = which('flutter', binDir: true);
 
-    final pinnedVersion = await ProjectService.instance.findVersion();
+    // Get pinned version, for comparison on terminal
+    final project = ProjectService.fromContext.findAncestor();
+
+    final pinnedVersion = project.pinnedVersion;
 
     CacheFlutterVersion? pinnedCacheVersion;
 
     if (pinnedVersion != null) {
       //TODO: Should run validation on this
-      final flutterPinnedVersion = FlutterVersion.parse(pinnedVersion);
-      pinnedCacheVersion =
-          CacheService.instance.getVersion(flutterPinnedVersion);
+      pinnedCacheVersion = CacheService.fromContext.getVersion(pinnedVersion);
     }
 
     final isDefaultInPath = flutterInPath == ctx.globalCacheBinPath;
@@ -76,26 +75,31 @@ class GlobalCommand extends BaseCommand {
       ..detail('');
 
     logger.info(
-      'Flutter SDK: ${cyan.wrap(validVersion.printFriendlyName)} is now global',
+      'Flutter SDK: ${cyan.wrap(cacheVersion.printFriendlyName)} is now global',
     );
 
     if (!isDefaultInPath && !isCachedVersionInPath && !isPinnedVersionInPath) {
       logger
         ..info('')
         ..notice('However your configured "flutter" path is incorrect')
-        ..spacer
         ..info(
-          'CURRENT: ${flutterInPath ?? 'No version is configured on path.'}',
+          'CURRENT: ${flutterInPath ?? 'No version is configured on path.'}'
+              .brightRed(),
         )
-        ..spacer
-        ..info('to use global Flutter SDK through FVM you should change it to:')
-        ..spacer
-        ..info('NEW: ${ctx.globalCacheBinPath}')
-        ..spacer
-        ..info(
-          'You should also configure it in FLUTTER_ROOT environment variable, as some IDEs use it.',
-        );
+        ..info('CHANGE TO: ${ctx.globalCacheBinPath}'.green())
+        ..spacer;
+    }
+
+    if (isVsCode()) {
+      logger
+        ..notice(
+          '$kVsCode might override the PATH to the Flutter in their terminal',
+        )
+        ..info('Run the command outside of the IDE to verify.');
     }
     return ExitCode.success.code;
   }
+
+  @override
+  String get invocation => 'fvm global {version}';
 }

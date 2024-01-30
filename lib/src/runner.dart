@@ -6,7 +6,10 @@ import 'package:args/command_runner.dart';
 import 'package:fvm/constants.dart';
 import 'package:fvm/src/commands/global_command.dart';
 import 'package:fvm/src/commands/update_command.dart';
-import 'package:fvm/src/utils/logger.dart';
+import 'package:fvm/src/services/config_repository.dart';
+import 'package:fvm/src/services/logger_service.dart';
+import 'package:fvm/src/utils/context.dart';
+import 'package:fvm/src/utils/deprecation_util.dart';
 import 'package:mason_logger/mason_logger.dart';
 import 'package:pub_updater/pub_updater.dart';
 import 'package:stack_trace/stack_trace.dart';
@@ -14,10 +17,8 @@ import 'package:stack_trace/stack_trace.dart';
 import '../exceptions.dart';
 import 'commands/config_command.dart';
 import 'commands/dart_command.dart';
-import 'commands/destroy_command.dart';
 import 'commands/doctor_command.dart';
 import 'commands/exec_command.dart';
-import 'commands/flavor_command.dart';
 import 'commands/flutter_command.dart';
 import 'commands/install_command.dart';
 import 'commands/list_command.dart';
@@ -29,19 +30,14 @@ import 'version.g.dart';
 
 /// Command Runner for FVM
 class FvmCommandRunner extends CommandRunner<int> {
+  final PubUpdater _pubUpdater;
+
   /// Constructor
-  FvmCommandRunner({
-    PubUpdater? pubUpdater,
-  })  : _pubUpdater = pubUpdater ?? PubUpdater(),
-        super(
-          kPackageName,
-          kDescription,
-        ) {
+  FvmCommandRunner({PubUpdater? pubUpdater})
+      : _pubUpdater = pubUpdater ?? PubUpdater(),
+        super(kPackageName, kDescription) {
     argParser
-      ..addFlag(
-        'verbose',
-        help: 'Print verbose output.',
-      )
+      ..addFlag('verbose', help: 'Print verbose output.', negatable: false)
       ..addFlag(
         'version',
         abbr: 'v',
@@ -58,21 +54,62 @@ class FvmCommandRunner extends CommandRunner<int> {
     addCommand(DoctorCommand());
     addCommand(SpawnCommand());
     addCommand(ConfigCommand());
-    addCommand(FlavorCommand());
-    addCommand(DestroyCommand());
     addCommand(ExecCommand());
     addCommand(UpdateCommand());
     addCommand(GlobalCommand());
   }
 
-  final PubUpdater _pubUpdater;
+  /// Checks if the current version (set by the build runner on the
+  /// version.dart file) is the most recent one. If not, show a prompt to the
+  /// user.
+  Future<Function()?> _checkForUpdates() async {
+    try {
+      if (ctx.updateCheckDisabled) return null;
+      final oneDayAgo = DateTime.now().subtract(const Duration(days: 1));
+      if (ctx.lastUpdateCheck?.isBefore(oneDayAgo) ?? false) {
+        return null;
+      }
 
-  // @override
-  // void printUsage() => logger.info(usage);
+      ConfigRepository.update(lastUpdateCheck: DateTime.now());
+
+      final isUpToDate = await _pubUpdater.isUpToDate(
+        packageName: kPackageName,
+        currentVersion: packageVersion,
+      );
+
+      if (isUpToDate) return null;
+
+      final latestVersion = await _pubUpdater.getLatestVersion(kPackageName);
+
+      return () {
+        final updateAvailableLabel = lightYellow.wrap('Update available!');
+        final currentVersionLabel = lightCyan.wrap(packageVersion);
+        final latestVersionLabel = lightCyan.wrap(latestVersion);
+        final updateCommandLabel = lightCyan.wrap('$executableName update');
+
+        logger
+          ..spacer
+          ..info(
+            '$updateAvailableLabel $currentVersionLabel \u2192 $latestVersionLabel',
+          )
+          ..info('Run $updateCommandLabel to update')
+          ..spacer;
+      };
+    } catch (_) {
+      return () {
+        logger.detail("Failed to check for updates.");
+      };
+    }
+  }
+
+  @override
+  void printUsage() => logger.info(usage);
 
   @override
   Future<int> run(Iterable<String> args) async {
     try {
+      deprecationWorkflow();
+
       final argResults = parse(args);
 
       if (argResults['verbose'] == true) {
@@ -84,39 +121,22 @@ class FvmCommandRunner extends CommandRunner<int> {
       final exitCode = await runCommand(argResults) ?? ExitCode.success.code;
 
       return exitCode;
-    } on FormatException catch (err, stackTrace) {
-      // On format errors, show the commands error message, root usage and
-      // exit with an error code
-      final trace = Trace.from(stackTrace);
-      logger
-        ..err(err.message)
-        ..spacer
-        ..err(trace.toString())
-        ..info('')
-        ..info(usage);
-      return ExitCode.usage.code;
-    } on AppTracedException catch (err, stackTrace) {
-      final trace = Trace.from(stackTrace);
+    } on AppDetailedException catch (err, stackTrace) {
       logger
         ..fail(err.message)
         ..spacer
-        ..err(trace.toString());
+        ..err(err.info);
 
-      if (logger.level != Level.verbose) {
-        logger
-          ..spacer
-          ..info(
-            'Please run command with  --verbose if you want more information',
-          );
-      }
+      _printTrace(stackTrace);
 
       return ExitCode.unavailable.code;
-    } on FileSystemException catch (err) {
+    } on FileSystemException catch (err, stackTrace) {
       if (checkIfNeedsPrivilegePermission(err)) {
         logger
           ..spacer
           ..fail('Requires administrator priviledges to run this command.')
           ..spacer;
+
         logger.notice(
           "You don't have the required priviledges to run this command.\n"
           "Try running with sudo or administrator priviledges.\n"
@@ -129,6 +149,8 @@ class FvmCommandRunner extends CommandRunner<int> {
         ..err(err.message)
         ..spacer
         ..err('Path: ${err.path}');
+
+      _printTrace(stackTrace);
 
       return ExitCode.ioError.code;
     } on AppException catch (err) {
@@ -151,9 +173,12 @@ class FvmCommandRunner extends CommandRunner<int> {
         ..info(err.usage);
 
       return ExitCode.usage.code;
-    } on Exception catch (e, stackTrace) {
-      final trace = Trace.from(stackTrace);
-      logger.err(trace.toString());
+    } on Exception catch (err, stackTrace) {
+      logger
+        ..spacer
+        ..err(err.toString());
+
+      _printTrace(stackTrace);
       return ExitCode.unavailable.code;
     } finally {
       // Add spacer after the last line always
@@ -179,7 +204,7 @@ class FvmCommandRunner extends CommandRunner<int> {
           logger.detail('  - $option: ${topLevelResults[option]}');
         }
       }
-      logger.spacer;
+      logger.detail('');
     }
 
     if (topLevelResults.command != null) {
@@ -200,10 +225,10 @@ class FvmCommandRunner extends CommandRunner<int> {
         }
       }
 
-      logger.spacer;
+      logger.detail('');
     }
 
-    final checkingForUpdate = _checkForUpdates(topLevelResults);
+    final checkingForUpdate = _checkForUpdates();
 
     // Run the command or show version
     final int? exitCode;
@@ -219,40 +244,19 @@ class FvmCommandRunner extends CommandRunner<int> {
 
     return exitCode;
   }
+}
 
-  /// Checks if the current version (set by the build runner on the
-  /// version.dart file) is the most recent one. If not, show a prompt to the
-  /// user.
-  Future<Function()?> _checkForUpdates(ArgResults args) async {
-    // Command might be null
-    final cmd = args.command?.name;
-    final commandsToCheck = ['use', 'install', 'remove'];
+void _printTrace(StackTrace stackTrace) {
+  final trace = Trace.from(stackTrace).toString();
+  logger
+    ..detail('')
+    ..detail(trace);
 
-    if (!commandsToCheck.contains(cmd)) return null;
-
-    try {
-      final latestVersion = await _pubUpdater.getLatestVersion(kPackageName);
-
-      if (packageVersion == latestVersion) return null;
-
-      return () {
-        final updateAvailableLabel = lightYellow.wrap('Update available!');
-        final currentVersionLabel = lightCyan.wrap(packageVersion);
-        final latestVersionLabel = lightCyan.wrap(latestVersion);
-        final updateCommandLabel = lightCyan.wrap('$executableName update');
-
-        logger
-          ..spacer
-          ..info(
-            '$updateAvailableLabel $currentVersionLabel \u2192 $latestVersionLabel',
-          )
-          ..info('Run $updateCommandLabel to update')
-          ..spacer;
-      };
-    } catch (_) {
-      return () {
-        logger.detail("Failed to check for updates.");
-      };
-    }
+  if (logger.level != Level.verbose) {
+    logger
+      ..spacer
+      ..info(
+        'Please run command with  --verbose if you want more information',
+      );
   }
 }

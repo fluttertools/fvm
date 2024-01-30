@@ -1,9 +1,9 @@
 import 'package:args/command_runner.dart';
 import 'package:dart_console/dart_console.dart';
-import 'package:fvm/constants.dart';
+import 'package:fvm/src/services/logger_service.dart';
+import 'package:fvm/src/services/releases_service/models/release.model.dart';
 import 'package:fvm/src/utils/console_utils.dart';
 import 'package:fvm/src/utils/helpers.dart';
-import 'package:fvm/src/utils/logger.dart';
 import 'package:mason_logger/mason_logger.dart';
 
 import '../services/releases_service/releases_client.dart';
@@ -24,6 +24,8 @@ class ReleasesCommand extends BaseCommand {
       'channel',
       help: 'Filter by channel name',
       abbr: 'c',
+      allowed: ['stable', 'beta', 'dev', 'all'],
+      defaultsTo: 'stable',
     );
   }
 
@@ -31,15 +33,24 @@ class ReleasesCommand extends BaseCommand {
   Future<int> run() async {
     // Get channel name
     final channelName = stringArg('channel');
+    final allChannel = 'all';
 
     if (channelName != null) {
-      logger.detail('Filtering by channel: $channelName');
-      if (!kFlutterChannels.contains(channelName)) {
+      if (!isFlutterChannel(channelName) && channelName != allChannel) {
         throw UsageException('Invalid Channel name: $channelName', usage);
       }
     }
 
-    final releases = await FlutterReleasesClient.get();
+    bool shouldFilterRelease(Release release) {
+      if (channelName == allChannel) {
+        return false;
+      }
+      return release.channel.name != channelName;
+    }
+
+    logger.detail('Filtering by channel: $channelName');
+
+    final releases = await FlutterReleases.get();
 
     final versions = releases.releases.reversed;
 
@@ -53,15 +64,16 @@ class ReleasesCommand extends BaseCommand {
       if (release.activeChannel) {
         // Add checkmark icon
         // as ascii code
-// Add backgroundColor
+        // Add backgroundColor
         final checkmark = String.fromCharCode(0x2713);
 
         channelLabel = '$channelLabel ${green.wrap(checkmark)}';
       }
 
-      if (channelName != null && release.channel.name != channelName) {
+      if (shouldFilterRelease(release)) {
         continue;
       }
+
       table.insertRow([
         release.version,
         friendlyDate(release.releaseDate),
@@ -79,13 +91,13 @@ class ReleasesCommand extends BaseCommand {
       ..insertColumn(header: 'Release Date', alignment: TextAlignment.left);
 
     for (var release in releases.channels.toList) {
-      if (channelName != null && release.channel.name != channelName) {
+      if (shouldFilterRelease(release)) {
         continue;
       }
       channelsTable.insertRow([
         release.channel.name,
         release.version,
-        friendlyDate(release.releaseDate)
+        friendlyDate(release.releaseDate),
       ]);
     }
 

@@ -1,10 +1,9 @@
 import 'package:args/args.dart';
 import 'package:fvm/constants.dart';
 import 'package:fvm/exceptions.dart';
-import 'package:fvm/src/utils/logger.dart';
+import 'package:fvm/fvm.dart';
+import 'package:fvm/src/services/logger_service.dart';
 
-import '../models/flutter_version_model.dart';
-import '../services/project_service.dart';
 import '../utils/commands.dart';
 import '../workflows/ensure_cache.workflow.dart';
 import 'base_command.dart';
@@ -23,19 +22,20 @@ class FlutterCommand extends BaseCommand {
 
   @override
   Future<int> run() async {
-    final version = await ProjectService.instance.findVersion();
+    final version = ProjectService.fromContext.findVersion();
     final args = [...argResults!.arguments];
 
+    CacheFlutterVersion? cacheVersion;
+
     if (version != null) {
-      final validVersion = FlutterVersion.parse(version);
       // Will install version if not already installed
-      final cacheVersion = await ensureCacheWorkflow(validVersion);
+      cacheVersion = await ensureCacheWorkflow(version);
 
       logger
         ..detail('$kPackageName: Running Flutter SDK from version $version')
         ..detail('');
 
-      void _checkIfUpgradeCommand(List<String> args) {
+      void checkIfUpgradeCommand(List<String> args) {
         if (args.isNotEmpty && args.first == 'upgrade') {
           throw AppException(
             'You should not upgrade a release version. '
@@ -45,17 +45,17 @@ class FlutterCommand extends BaseCommand {
       }
 
       // If its not a channel silence version check
-      if (!validVersion.isChannel) {
-        _checkIfUpgradeCommand(args);
+      if (!cacheVersion.isChannel) {
+        checkIfUpgradeCommand(args);
       }
       // Runs flutter command with pinned version
-      return runFlutter(cacheVersion, args);
     } else {
       logger
         ..detail('$kPackageName: Running Flutter SDK from PATH')
         ..detail('');
       // Running null will default to flutter version on paths
-      return runFlutterGlobal(args);
     }
+    final results = await runFlutter(args, version: cacheVersion);
+    return results.exitCode;
   }
 }
