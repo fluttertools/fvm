@@ -1,0 +1,17 @@
+{
+  "name": "FVM",
+  "theme": "#36B9B9",
+  "sidebar": [
+    ["Home", "/"],
+    ["Another Page", "/another-page"]
+  ],
+  "favicon": "./assets/favicon.ico",
+  "logo": "./assets/logo.svg",
+  "socialPreview": "./assets/og.png",
+  "twitter": "https://twitter.com/leoafarias",
+  "docsearch": {
+    "appId": "NHQT1G41IK",
+    "apiKey": "b07d9adbf54ef4306a11233dd605d924",
+    "indexName": "fvm"
+  }
+}
