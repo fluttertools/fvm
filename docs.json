@@ -5,9 +5,9 @@
     ["Home", "/"],
     ["Another Page", "/another-page"]
   ],
-  "favicon": "./assets/favicon.ico",
-  "logo": "./assets/logo.svg",
-  "socialPreview": "./assets/og.png",
+  "favicon": "./docs/assets/favicon.ico",
+  "logo": "./docs/assets/logo.svg",
+  "socialPreview": "./docs/assets/og.png",
   "twitter": "https://twitter.com/leoafarias",
   "docsearch": {
     "appId": "NHQT1G41IK",
