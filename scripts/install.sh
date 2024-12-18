@@ -20,10 +20,13 @@ Darwin*) OS='macos' ;;
 esac
 
 case "$ARCH" in
-  x86_64) ARCH='x64' ;;
-  arm64|aarch64) ARCH='arm64' ;;
-  armv7l) ARCH='arm' ;;
-  *) log_message "Unsupported architecture"; exit 1 ;;
+x86_64) ARCH='x64' ;;
+arm64 | aarch64) ARCH='arm64' ;;
+armv7l) ARCH='arm' ;;
+*)
+    log_message "Unsupported architecture"
+    exit 1
+    ;;
 esac
 
 # Terminal colors setup
@@ -74,15 +77,19 @@ fi
 log_message "Installing FVM version $FVM_VERSION."
 
 # Setup installation directory and symlink
-FVM_DIR="$HOME/.fvm_flutter"
-FVM_DIR_BIN="$FVM_DIR/bin"
-
-SYMLINK_TARGET="/usr/local/bin/fvm"
-
+FVM_DIR="${FVM_DIR:-$HOME/.fvm_flutter}"
+FVM_DIR_BIN="${FVM_DIR_BIN:-$FVM_DIR/bin}"
+SYMLINK_TARGET="${FVM_SYMLINK_TARGET:-/usr/local/bin/fvm}"
 
 # Create FVM directory if it doesn't exist
-mkdir -p "$FVM_DIR_BIN" || error "Failed to create FVM directory: $FVM_DIR_BIN."
+mkdir -p "$FVM_DIR_BIN" || {
+    echo "Failed to create FVM directory: $FVM_DIR_BIN."
+    exit 1
+}
 
+echo "FVM installation directory: $FVM_DIR"
+echo "FVM binary directory: $FVM_DIR_BIN"
+echo "FVM symlink target: $SYMLINK_TARGET"
 
 # Check if FVM_DIR_BIN exists, and if it does delete it
 
@@ -114,11 +121,22 @@ if ! mv "$FVM_DIR/fvm" "$FVM_DIR_BIN"; then
     error "Failed to move fvm to bin directory."
 fi
 
-
 # Create a symlink
-if ! sudo ln -sf "$FVM_DIR_BIN/fvm" "$SYMLINK_TARGET"; then
-    error "Failed to create symlink."
+if [ -n "${FVM_SYMLINK_TARGET}" ]; then
+    # Skip sudo if FVM_SYMLINK_TARGET is explicitly set
+    if ! ln -sf "$FVM_DIR_BIN/fvm" "$SYMLINK_TARGET"; then
+        echo "Failed to create symlink at $SYMLINK_TARGET."
+        exit 1
+    fi
+else
+    # Use sudo for default SYMLINK_TARGET
+    if ! sudo ln -sf "$FVM_DIR_BIN/fvm" "$SYMLINK_TARGET"; then
+        echo "Failed to create symlink at $SYMLINK_TARGET with sudo."
+        exit 1
+    fi
 fi
+
+echo "Symlink created at $SYMLINK_TARGET pointing to $FVM_DIR_BIN/fvm"
 
 tildify() {
     if [[ $1 = $HOME/* ]]; then
@@ -246,7 +264,6 @@ esac
 echo
 log_message "To get started, run:"
 echo
-
 
 if [[ $refresh_command ]]; then
     info_bold "  $refresh_command"
